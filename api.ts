@@ -1,3 +1,5 @@
+import { supabase } from "./db";
+
 declare global {
   interface Window {
     Telegram?: {
@@ -59,13 +61,24 @@ export function getInitData(): string {
   return window.Telegram?.WebApp?.initData ?? "";
 }
 
+/** Qarzni to'landi deb belgilash (Supabase bazasini yangilaydi) */
 export async function payDebt(debtId: string, extra?: any): Promise<boolean> {
-  // Bu yerda qarzni to'lash amali bajariladi
+  const { error } = await supabase
+    .from("debts")
+    .update({ status: "paid" })
+    .eq("id", debtId);
+
+  if (error) throw new Error(error.message);
   return true;
 }
 
+/** Yangi qarz qo'shish (Supabase bazasiga yozadi) */
 export async function createDebt(data: any): Promise<boolean> {
-  // Bu yerda qarz yaratish amali bajariladi
+  const { error } = await supabase
+    .from("debts")
+    .insert(data);
+
+  if (error) throw new Error(error.message);
   return true;
 }
 
