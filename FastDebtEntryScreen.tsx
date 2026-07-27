@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { 
   Moon, 
   Sun, 
@@ -73,8 +73,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
   const [dueInDays, setDueInDays] = useState<number>(30);
   const [customDateInput, setCustomDateInput] = useState<string>('');
   const [note, setNote] = useState<string>('');
-  
-  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const DUE_DAY_OPTIONS = [
     { label: '+3 kun', days: 3 },
@@ -185,6 +183,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
       setCustomerPhone('+998 ');
       setSelectedNeighborhood('');
       setNote('');
+      setCustomDateInput('');
     } catch (err: any) {
       triggerHaptic('error');
       setNotification({ 
@@ -225,13 +224,14 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
   };
 
   return (
-    <div className={`min-h-screen w-full transition-colors duration-200 flex flex-col justify-between select-none pb-16 ${
+    <div className={`min-h-screen w-full transition-colors duration-200 flex flex-col justify-between select-none pb-20 ${
       isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
     }`}>
       
+      {/* Header */}
       <header className={`px-4 py-3 border-b flex items-center justify-between ${
-        isDarkMode ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-white/80'
-      } backdrop-blur-md sticky top-0 z-10`}>
+        isDarkMode ? 'border-slate-800 bg-slate-900/80' : 'border-slate-200 bg-white/80'
+      } backdrop-blur-md sticky top-0 z-20`}>
         <div className="flex items-center gap-2">
           <Wallet className="w-5 h-5 text-indigo-500" />
           <h1 className="font-semibold text-lg">Tezkor Nasiya</h1>
@@ -242,7 +242,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             triggerHaptic('light');
             setIsDarkMode(!isDarkMode);
           }}
-          className={`p-2.5 rounded-xl border transition active:scale-95 ${
+          className={`p-2 rounded-xl border transition active:scale-95 ${
             isDarkMode 
               ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' 
               : 'bg-slate-100 border-slate-200 text-indigo-600 hover:bg-slate-200'
@@ -251,6 +251,22 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
       </header>
+
+      {/* STICKY SUMMA EKRANI (Tepada qolib ketmaydi, doim ko'rinib turadi) */}
+      <div className={`sticky top-[53px] z-10 px-4 py-2.5 backdrop-blur-md border-b ${
+        isDarkMode ? 'bg-slate-950/90 border-slate-800/80' : 'bg-slate-50/90 border-slate-200'
+      }`}>
+        <div className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-1 shadow-inner ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+        }`}>
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Nasiya Summasi</span>
+          <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight transition-all ${
+            numericAmount > 0 ? 'text-indigo-500' : 'text-slate-500'
+          }`}>
+            {formattedAmount}
+          </div>
+        </div>
+      </div>
 
       <main className="flex-1 max-w-md w-full mx-auto p-4 flex flex-col gap-4">
 
@@ -265,17 +281,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </div>
         )}
 
-        <div className={`p-5 rounded-2xl border flex flex-col items-center justify-center gap-1 shadow-inner ${
-          isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-        }`}>
-          <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">Nasiya Summasi</span>
-          <div className={`text-3xl font-extrabold tracking-tight transition-all ${
-            numericAmount > 0 ? 'text-indigo-500' : 'text-slate-500'
-          }`}>
-            {formattedAmount}
-          </div>
-        </div>
-
         <div className="grid grid-cols-2 gap-2">
           <input
             type="text"
@@ -284,8 +289,8 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             placeholder="Mijoz ismi"
             className={`px-3.5 py-3 rounded-xl text-sm border outline-none ${
               isDarkMode
-                ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-600'
-                : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400'
+                ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-600 focus:border-indigo-500'
+                : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-indigo-500'
             }`}
           />
           <input
@@ -295,8 +300,8 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             placeholder="+998 90 123 45 67"
             className={`px-3.5 py-3 rounded-xl text-sm border outline-none ${
               isDarkMode
-                ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-600'
-                : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400'
+                ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-600 focus:border-indigo-500'
+                : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-indigo-500'
             }`}
           />
         </div>
@@ -306,21 +311,15 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             <label className="text-xs font-semibold text-slate-400">
               To'lov muddati ({dueInDays} kun)
             </label>
-            <div className="flex items-center gap-1 text-xs text-indigo-400">
+            {/* Kalendar muammosi mutlaq hal qilindi: Inputni to'g'ridan-to'g'ri shaffof qilib ustiga qo'yamiz */}
+            <div className="relative flex items-center gap-1.5 text-xs text-indigo-400 font-medium px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 cursor-pointer hover:bg-indigo-500/20 transition">
               <Calendar className="w-3.5 h-3.5" />
-              <button 
-                type="button"
-                onClick={() => dateInputRef.current?.showPicker?.()}
-                className="bg-transparent text-xs outline-none cursor-pointer text-indigo-400 font-medium hover:underline"
-              >
-                {customDateInput || "Sanani tanlash"}
-              </button>
+              <span>{customDateInput || "Aniq sana"}</span>
               <input 
-                ref={dateInputRef}
                 type="date" 
                 value={customDateInput}
                 onChange={handleDateSelect}
-                className="sr-only"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               />
             </div>
           </div>
@@ -478,10 +477,16 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
       </main>
 
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className={`max-w-xs w-full rounded-3xl p-6 border shadow-2xl flex flex-col items-center text-center gap-4 ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
+        <div 
+          onClick={() => setShowConfirmModal(false)}
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className={`max-w-xs w-full rounded-3xl p-6 border shadow-2xl flex flex-col items-center text-center gap-4 ${
+              isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
             <div className="p-3.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
               <AlertTriangle className="w-8 h-8" />
             </div>
@@ -504,10 +509,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
               </button>
               
               <button
-                onClick={() => {
-                  triggerHaptic('light');
-                  setShowConfirmModal(false);
-                }}
+                onClick={() => setShowConfirmModal(false)}
                 className={`w-full py-2.5 rounded-xl text-xs font-semibold transition ${
                   isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}

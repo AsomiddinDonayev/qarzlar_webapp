@@ -30,12 +30,10 @@ export default function App() {
 
   useOfflineSync();
 
-  // Xavfsiz va aniq ma'lumot olish (Join o'rniga alohida so'rovlar)
   const fetchDebtors = async (businessId: string) => {
     try {
       setFetchError(null);
       
-      // 1. Nasiyalarni olish
       const { data: debtsData, error: debtsError } = await supabase
         .from("debts")
         .select("*")
@@ -48,7 +46,6 @@ export default function App() {
         return;
       }
 
-      // 2. Mijozlarni olish
       const { data: customersData, error: customersError } = await supabase
         .from("customers")
         .select("*")
@@ -56,27 +53,30 @@ export default function App() {
 
       if (customersError) throw new Error("Mijozlarni o'qishda xato: " + customersError.message);
 
-      // Ma'lumotlarni birlashtirish
       const customerMap = new Map();
       customersData?.forEach(c => customerMap.set(c.id, c));
 
       const formatted: DebtRecord[] = debtsData.map((item: any) => {
         const customer = customerMap.get(item.customer_id) || {};
+        const amount = item.amount || 0;
+        const paidAmount = item.paid_amount || 0;
+        const isPaid = paidAmount >= amount;
+        
         return {
           id: item.id,
           customerName: customer.name || "Noma'lum",
           customerPhone: customer.phone || "Noma'lum",
-          amount: item.amount,
-          paidAmount: item.paid_amount || 0,
+          amount: amount,
+          paidAmount: paidAmount,
           dueDate: item.due_date || new Date().toISOString().slice(0, 10),
-          status: item.status || 'active',
+          status: isPaid ? 'paid' : (item.status || 'active'),
           category: "Oziq-ovqat",
           neighborhood: "Markaz",
           history: [
             {
               date: item.created_at ? item.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
               type: 'debt',
-              amount: item.amount,
+              amount: amount,
               note: item.note || "Nasiya qo'shildi"
             }
           ]
@@ -126,7 +126,6 @@ export default function App() {
 
     let customerId: string;
     
-    // Mijoz mavjudligini tekshirish
     const { data: existing } = await supabase
       .from("customers")
       .select("id")
@@ -172,12 +171,27 @@ export default function App() {
         amount: data.amount,
         note: data.note || null,
         due_date: dueDateStr,
+        paid_amount: 0
       });
       if (dError) throw new Error("Nasiyani saqlashda xato: " + dError.message);
     }
 
-    // Muvaffaqiyatli saqlangach ro'yxatni yangilaymiz
     await fetchDebtors(appUser.business_id);
+  };
+
+  // Qarzdor ma'lumotlari yangilanganda (to'lov qilganda yoki muddat uzaytirganda)
+  const handleUpdateDebt = async (updatedDebtor: DebtRecord) => {
+    setDebtorsList(prev => prev.map(d => d.id === updatedDebtor.id ? updatedDebtor : d));
+    
+    // Bazada yangilash
+    await supabase
+      .from("debts")
+      .update({
+        paid_amount: updatedDebtor.paidAmount,
+        due_date: updatedDebtor.dueDate,
+        status: updatedDebtor.status
+      })
+      .eq("id", updatedDebtor.id);
   };
 
   const handleSaveProfile = async (updatedData: ShopProfileData) => {
@@ -222,7 +236,7 @@ export default function App() {
           <FastDebtEntryScreen onSubmit={handleDebtSubmit} />
         )}
         {activeTab === 'debtors' && (
-          <DebtorsScreen debtors={debtorsList} onCall={handleCallDebtor} />
+          <DebtorsScreen debtors={debtorsList} onCall={handleCallDebtor} onUpdateDebt={handleUpdateDebt} />
         )}
         {activeTab === 'profile' && (
           <ShopProfileScreen initialData={shopProfile} onSave={handleSaveProfile} />
