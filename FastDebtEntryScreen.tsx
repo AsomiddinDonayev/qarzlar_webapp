@@ -10,11 +10,11 @@ import {
   Wallet, 
   MapPin, 
   Tag, 
-  Loader2 
+  Loader2,
+  Calendar
 } from 'lucide-react';
-import { api } from './api';
 
-// Types
+// Types[cite: 31]
 export interface DebtPayload {
   amount: number;
   customerName: string;
@@ -28,16 +28,15 @@ export interface DebtPayload {
 
 export interface FastDebtEntryScreenProps {
   onSubmit?: (data: DebtPayload) => Promise<void>;
-  onSuccess?: () => void; // App.tsx bilan bog'lanish uchun qo'shildi
   onBack?: () => void;
   neighborhoods?: string[];
   categories?: string[];
 }
 
-const TYPO_GUARD_THRESHOLD = 2000000; // 2,000,000 UZS limit for extra confirmation
-const MAX_ALLOWED_AMOUNT = 1000000000; // 1,000,000,000 UZS maximum boundary
+const TYPO_GUARD_THRESHOLD = 2000000; // 2,000,000 UZS limit for extra confirmation[cite: 31]
+const MAX_ALLOWED_AMOUNT = 1000000000; // 1,000,000,000 UZS maximum boundary[cite: 31]
 
-// Telegram Haptic Feedback Helper
+// Telegram Haptic Feedback Helper[cite: 31]
 const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'error' | 'success' = 'light') => {
   if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.HapticFeedback) {
     const haptic = (window as any).Telegram.WebApp.HapticFeedback;
@@ -49,43 +48,66 @@ const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'error' | 'success'
   }
 };
 
+// Phone auto-formatter for Uzbekistan (+998 XX XXX XX XX)
+const formatPhoneNumber = (value: string) => {
+  let numbers = value.replace(/\D/g, '');
+  if (numbers.startsWith('998')) {
+    numbers = numbers.slice(3);
+  }
+  numbers = numbers.slice(0, 9); // Max 9 digits after 998
+  
+  let formatted = '+998';
+  if (numbers.length > 0) formatted += ' ' + numbers.substring(0, 2);
+  if (numbers.length > 2) formatted += ' ' + numbers.substring(2, 5);
+  if (numbers.length > 5) formatted += ' ' + numbers.substring(5, 7);
+  if (numbers.length > 7) formatted += ' ' + numbers.substring(7, 9);
+  return formatted;
+};
+
 export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
   onSubmit,
-  onSuccess,
   onBack,
   neighborhoods = ["Markaz", "Yangi Hayot", "Navro'z", "Bog'ishamol", "Do'stlik"],
   categories = ["Oziq-ovqat", "Xo'jalik mollari", "Ichimliklar", "Qurilish", "Boshqa"]
 }) => {
-  // Theme state
+  // Theme state[cite: 31]
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
 
-  // Form states
+  // Form states[cite: 31]
   const [amountString, setAmountString] = useState<string>('0');
   const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string>(neighborhoods[0] || '');
+  const [customerPhone, setCustomerPhone] = useState<string>('+998 ');
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string>(''); // Optional now
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0] || '');
   const [dueInDays, setDueInDays] = useState<number>(30);
+  const [customDateInput, setCustomDateInput] = useState<string>('');
   const [note, setNote] = useState<string>('');
-  const DUE_DAY_OPTIONS = [7, 15, 30, 60];
+  
+  const DUE_DAY_OPTIONS = [
+    { label: '+3 kun', days: 3 },
+    { label: '+7 kun', days: 7 },
+    { label: '+14 kun', days: 14 },
+    { label: '+30 kun', days: 30 },
+    { label: '+60 kun', days: 60 },
+  ];
 
-  // UI status states
+  // UI status states[cite: 31]
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Calculated numeric amount
+  // Calculated numeric amount[cite: 31]
   const numericAmount = useMemo(() => {
     const parsed = parseInt(amountString, 10);
     return isNaN(parsed) ? 0 : parsed;
   }, [amountString]);
 
-  // Formatted currency display
+  // Formatted currency display[cite: 31]
   const formattedAmount = useMemo(() => {
     return new Intl.NumberFormat('uz-UZ').format(numericAmount) + " so'm";
   }, [numericAmount]);
 
-  // Notification auto-dismiss
+  // Notification auto-dismiss[cite: 31]
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 3500);
@@ -93,12 +115,19 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
     }
   }, [notification]);
 
-  // NumPad Input Handlers
+  // Phone input handler with auto-formatting
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const formatted = formatPhoneNumber(val);
+    setCustomerPhone(formatted);
+  };
+
+  // NumPad Input Handlers[cite: 31]
   const handleDigitPress = useCallback((digit: string) => {
     triggerHaptic('light');
     setAmountString((prev) => {
       if (prev === '0') return digit === '00' ? '0' : digit;
-      if (prev.length >= 10) return prev; // Limit string length
+      if (prev.length >= 10) return prev;
       const newValue = prev + digit;
       if (parseInt(newValue, 10) > MAX_ALLOWED_AMOUNT) return prev;
       return newValue;
@@ -128,7 +157,22 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
     });
   }, []);
 
-  // Validation & Submission Logic
+  // Handle Calendar Date Selection
+  const handleDateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const dateVal = e.target.value;
+    setCustomDateInput(dateVal);
+    if (dateVal) {
+      const targetDate = new Date(dateVal);
+      const today = new Date();
+      const diffTime = targetDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        setDueInDays(diffDays);
+      }
+    }
+  };
+
+  // Validation & Submission Logic[cite: 31]
   const executeSubmission = async () => {
     if (isSubmitting) return;
 
@@ -139,7 +183,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
       amount: numericAmount,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      neighborhood: selectedNeighborhood,
+      neighborhood: selectedNeighborhood || "Ko'rsatilmagan",
       category: selectedCategory,
       note: note.trim(),
       dueInDays,
@@ -149,35 +193,15 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
     try {
       if (onSubmit) {
         await onSubmit(payload);
-      } else {
-        // App.tsx orqali to'g'ridan-to'g'ri API ga saqlash
-        const success = await api.createDebt({
-          customer_name: customerName.trim(),
-          phone: customerPhone.trim(),
-          amount: numericAmount,
-          due_days: dueInDays,
-          region: selectedNeighborhood,
-          category: selectedCategory,
-        });
-
-        if (!success) {
-          throw new Error("Serverga saqlashda xatolik yuz berdi.");
-        }
       }
-
       triggerHaptic('success');
       setNotification({ type: 'success', message: "Nasiya muvaffaqiyatli saqlandi!" });
-
-      // Reset form
+      // Reset form[cite: 31]
       setAmountString('0');
       setCustomerName('');
-      setCustomerPhone('');
+      setCustomerPhone('+998 ');
+      setSelectedNeighborhood('');
       setNote('');
-
-      // Ro'yxat oynasiga avtomatik o'tish
-      if (onSuccess) {
-        onSuccess();
-      }
     } catch (err: any) {
       triggerHaptic('error');
       setNotification({ 
@@ -196,13 +220,21 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
       return;
     }
 
-    if (!customerName.trim() || !customerPhone.trim()) {
+    if (!customerName.trim()) {
       triggerHaptic('error');
-      setNotification({ type: 'error', message: "Mijoz ismi va telefon raqamini kiriting!" });
+      setNotification({ type: 'error', message: "Mijoz ismini kiritishingiz shart!" });
       return;
     }
 
-    // Trigger Typo Guard Modal if amount is high
+    // Validate Phone Format (+998 XX XXX XX XX -> exactly 9 digits after +998)
+    const phoneDigits = customerPhone.replace(/\D/g, '').replace(/^998/, '');
+    if (phoneDigits.length !== 9) {
+      triggerHaptic('error');
+      setNotification({ type: 'error', message: "Telefon raqam noto'g'ri formatda! Masalan: +998 90 123 45 67" });
+      return;
+    }
+
+    // Trigger Typo Guard Modal if amount is high[cite: 31]
     if (numericAmount >= TYPO_GUARD_THRESHOLD) {
       triggerHaptic('medium');
       setShowConfirmModal(true);
@@ -216,7 +248,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
       isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
     }`}>
       
-      {/* Top Bar Header */}
+      {/* Top Bar Header[cite: 31] */}
       <header className={`px-4 py-3 border-b flex items-center justify-between ${
         isDarkMode ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-white/80'
       } backdrop-blur-md sticky top-0 z-10`}>
@@ -252,10 +284,10 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
         </button>
       </header>
 
-      {/* Main Form Content */}
+      {/* Main Form Content[cite: 31] */}
       <main className="flex-1 max-w-md w-full mx-auto p-4 flex flex-col gap-4">
 
-        {/* Dynamic Notification Toast */}
+        {/* Dynamic Notification Toast[cite: 31] */}
         {notification && (
           <div className={`p-3.5 rounded-xl flex items-center gap-3 text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2 ${
             notification.type === 'success' 
@@ -267,7 +299,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </div>
         )}
 
-        {/* Currency Display Area */}
+        {/* Currency Display Area[cite: 31] */}
         <div className={`p-5 rounded-2xl border flex flex-col items-center justify-center gap-1 shadow-inner ${
           isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
         }`}>
@@ -295,7 +327,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           <input
             type="tel"
             value={customerPhone}
-            onChange={(e) => setCustomerPhone(e.target.value)}
+            onChange={handlePhoneChange}
             placeholder="+998 90 123 45 67"
             className={`px-3.5 py-3 rounded-xl text-sm border outline-none ${
               isDarkMode
@@ -305,47 +337,57 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           />
         </div>
 
-        {/* Due Date Term Selector */}
+        {/* Due Date Term Selector & Calendar Picker */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 px-1">
-            To'lov muddati
-          </label>
+          <div className="flex items-center justify-between px-1">
+            <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+              To'lov muddati ({dueInDays} kun)
+            </label>
+            <div className="flex items-center gap-1 text-xs text-indigo-400">
+              <Calendar className="w-3.5 h-3.5" />
+              <input 
+                type="date" 
+                value={customDateInput}
+                onChange={handleDateSelect}
+                className="bg-transparent text-xs outline-none cursor-pointer text-indigo-400 font-medium"
+              />
+            </div>
+          </div>
           <div className="flex gap-2">
-            {DUE_DAY_OPTIONS.map((days) => (
+            {DUE_DAY_OPTIONS.map((opt) => (
               <button
-                key={days}
-                type="button"
+                key={opt.days}
                 onClick={() => {
                   triggerHaptic('light');
-                  setDueInDays(days);
+                  setDueInDays(opt.days);
+                  setCustomDateInput('');
                 }}
                 className={`flex-1 py-2 rounded-xl text-xs font-medium transition active:scale-95 border ${
-                  dueInDays === days
+                  dueInDays === opt.days && !customDateInput
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
                     : isDarkMode
                     ? 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                {days} kun
+                {opt.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Neighborhood Selector */}
+        {/* Neighborhood Selector (Optional) */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 px-1">
-            <MapPin className="w-3.5 h-3.5 text-indigo-400" /> Mahalla / Hudud
+            <MapPin className="w-3.5 h-3.5 text-indigo-400" /> Mahalla / Hudud (Ixtiyoriy)
           </label>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             {neighborhoods.map((item) => (
               <button
                 key={item}
-                type="button"
                 onClick={() => {
                   triggerHaptic('light');
-                  setSelectedNeighborhood(item);
+                  setSelectedNeighborhood(prev => prev === item ? '' : item);
                 }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition active:scale-95 border ${
                   selectedNeighborhood === item
@@ -361,7 +403,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </div>
         </div>
 
-        {/* Category Selector */}
+        {/* Category Selector[cite: 31] */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 px-1">
             <Tag className="w-3.5 h-3.5 text-indigo-400" /> Mahsulot Toifasi
@@ -370,7 +412,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             {categories.map((cat) => (
               <button
                 key={cat}
-                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setSelectedCategory(cat);
@@ -389,7 +430,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </div>
         </div>
 
-        {/* Quick Addition Chips */}
+        {/* Quick Addition Chips[cite: 31] */}
         <div className="grid grid-cols-4 gap-2">
           {[
             { label: '+10k', val: 10000 },
@@ -399,7 +440,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           ].map((chip) => (
             <button
               key={chip.label}
-              type="button"
               onClick={() => handleQuickAdd(chip.val)}
               className={`py-2 rounded-xl text-xs font-semibold border transition active:scale-95 ${
                 isDarkMode 
@@ -412,12 +452,11 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           ))}
         </div>
 
-        {/* Custom Numpad Grid */}
+        {/* Custom Numpad Grid[cite: 31] */}
         <div className="grid grid-cols-3 gap-2 mt-1">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((digit) => (
             <button
               key={digit}
-              type="button"
               onClick={() => handleDigitPress(digit)}
               className={`py-3.5 rounded-2xl text-xl font-bold border transition active:scale-95 ${
                 isDarkMode
@@ -429,9 +468,8 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             </button>
           ))}
 
-          {/* Backspace Button */}
+          {/* Backspace Button[cite: 31] */}
           <button
-            type="button"
             onClick={handleBackspace}
             aria-label="Bitta o'chirish"
             className={`py-3.5 rounded-2xl border flex items-center justify-center transition active:scale-95 ${
@@ -444,10 +482,9 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </button>
         </div>
 
-        {/* Clear & Save Action Bar */}
+        {/* Clear & Save Action Bar[cite: 31] */}
         <div className="flex gap-2.5 mt-2">
           <button
-            type="button"
             onClick={handleClear}
             aria-label="Tozalash"
             className={`px-4 py-3.5 rounded-2xl border font-semibold flex items-center justify-center transition active:scale-95 ${
@@ -460,7 +497,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </button>
 
           <button
-            type="button"
             onClick={handleSubmitAttempt}
             disabled={isSubmitting || numericAmount <= 0}
             className="flex-1 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition active:scale-[0.98]"
@@ -478,7 +514,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
 
       </main>
 
-      {/* Typo Guard Confirmation Modal */}
+      {/* Typo Guard Confirmation Modal[cite: 31] */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className={`max-w-xs w-full rounded-3xl p-6 border shadow-2xl flex flex-col items-center text-center gap-4 ${
@@ -497,7 +533,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
 
             <div className="flex flex-col w-full gap-2 pt-2">
               <button
-                type="button"
                 onClick={executeSubmission}
                 disabled={isSubmitting}
                 className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2"
@@ -507,7 +542,6 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
               </button>
               
               <button
-                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setShowConfirmModal(false);
