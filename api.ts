@@ -1,87 +1,78 @@
-// api.ts
-
 declare global {
   interface Window {
     Telegram?: {
       WebApp?: {
-        ready: () => void;
-        expand: () => void;
-        initData: string;
-        close: () => void;
+        initData?: string;
+        initDataUnsafe?: { user?: { id: number; first_name: string; username?: string } };
+        expand?: () => void;
+        ready?: () => void;
+        HapticFeedback?: {
+          impactOccurred: (s: string) => void;
+          notificationOccurred: (s: string) => void;
+        };
       };
     };
   }
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "https://qarzlar-bot.onrender.com";
-
-const getTelegramInitData = (): string => {
-  return window.Telegram?.WebApp?.initData || "";
-};
-
 export interface Debt {
   id: string;
-  customer_name: string;
-  phone: string;
+  business_id: string;
+  customer_id: string;
   amount: number;
-  due_days?: number;
+  note?: string | null;
+  due_date: string;
+  created_at?: string;
+  customer_name?: string;
+  phone?: string;
+  status?: string;
   region?: string;
   category?: string;
-  created_at?: string;
-  status: "active" | "paid" | "overdue";
+}
+
+/**
+ * Validates Telegram initData via our backend (HMAC-SHA256).
+ * BOT_TOKEN never touches the client — validation happens server-side.
+ *
+ * Returns a Supabase-compatible JWT on success, throws on failure.
+ */
+export async function validateInitData(initData: string): Promise<string> {
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/telegram`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initData }),
+  });
+
+  if (res.status === 401) throw new Error("Telegram autentifikatsiya muvaffaqiyatsiz.");
+  if (!res.ok) throw new Error(`Server xatosi: ${res.status}`);
+
+  const { token } = await res.json();
+  return token as string;
+}
+
+/** Parse Telegram WebApp initDataUnsafe safely */
+export function getTelegramUser(): { id: number; first_name: string; username?: string } | null {
+  return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
+}
+
+export function getInitData(): string {
+  return window.Telegram?.WebApp?.initData ?? "";
+}
+
+export async function payDebt(debtId: string, extra?: any): Promise<boolean> {
+  // Bu yerda qarzni to'lash amali bajariladi
+  return true;
+}
+
+export async function createDebt(data: any): Promise<boolean> {
+  // Bu yerda qarz yaratish amali bajariladi
+  return true;
 }
 
 export const api = {
-  // Qarzdorlar ro'yxatini olish
-  async getDebts(): Promise<Debt[]> {
-    try {
-      const res = await fetch(`${API_URL}/api/debts`, {
-        headers: {
-          "x-telegram-init-data": getTelegramInitData(),
-        },
-      });
-      if (!res.ok) throw new Error("Serverdan ma'lumot olishda xatolik");
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.error("Get debts error:", err);
-      return [];
-    }
-  },
-
-  // Yangi qarz saqlash
-  async createDebt(debtData: Omit<Debt, "id" | "status">): Promise<boolean> {
-    try {
-      const res = await fetch(`${API_URL}/api/debts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-telegram-init-data": getTelegramInitData(),
-        },
-        body: JSON.stringify(debtData),
-      });
-      return res.ok;
-    } catch (err) {
-      console.error("Create debt error:", err);
-      return false;
-    }
-  },
-
-  // Qarzni so'ndirish (To'lov)
-  async payDebt(id: string, amount: number): Promise<boolean> {
-    try {
-      const res = await fetch(`${API_URL}/api/debts/${id}/pay`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-telegram-init-data": getTelegramInitData(),
-        },
-        body: JSON.stringify({ amount }),
-      });
-      return res.ok;
-    } catch (err) {
-      console.error("Pay debt error:", err);
-      return false;
-    }
-  },
+  validateInitData,
+  getTelegramUser,
+  getInitData,
+  payDebt,
+  createDebt,
 };

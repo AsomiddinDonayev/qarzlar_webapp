@@ -1,92 +1,124 @@
-// App.tsx
-import { useState, useEffect } from "react";
-import FastDebtEntryScreen from "./FastDebtEntryScreen";
-import { DebtsListScreen } from "./DebtsListScreen";
-import { api, Debt } from "./api";
+import React, { useEffect, useState } from "react";
+import { validateInitData, getInitData, getTelegramUser } from "./api";
+import { supabase, setSupabaseJwt } from "./db";
+import { useOfflineSync, queueDebt } from "./useOfflineSync";
+import FastDebtEntryScreen, { DebtPayload } from "./FastDebtEntryScreen";
+
+interface AppUser {
+  telegram_id: number;
+  business_id: string;
+  role: "owner" | "manager";
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"list" | "add">("list");
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useOfflineSync();
 
   useEffect(() => {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
+    window.Telegram?.WebApp?.ready?.();
+    window.Telegram?.WebApp?.expand?.();
+
+    const initData = getInitData();
+    if (!initData) {
+      setAuthError("Ilovani Telegram ichida oching.");
+      return;
     }
-    loadDebts();
+
+    validateInitData(initData)
+      .then(async (jwt) => {
+        setSupabaseJwt(jwt);
+        const tgUser = getTelegramUser();
+        if (!tgUser) throw new Error("Foydalanuvchi topilmadi.");
+
+        const { data, error } = await supabase
+          .from("users")
+          .select("telegram_id, business_id, role")
+          .eq("telegram_id", tgUser.id)
+          .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error("Avval botda /start bosing.");
+        setAppUser(data as AppUser);
+      })
+      .catch((e: Error) => setAuthError(e.message));
   }, []);
 
-  const loadDebts = async () => {
-    setLoading(true);
-    const data = await api.getDebts();
-    setDebts(data);
-    setLoading(false);
+  const handleDebtSubmit = async (data: DebtPayload) => {
+    if (!appUser) throw new Error("Autentifikatsiya xatosi.");
+
+    // Upsert customer by phone within this business
+    let customerId: string;
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("business_id", appUser.business_id)
+      .eq("phone", data.customerPhone)
+      .maybeSingle();
+
+    if (existing) {
+      customerId = existing.id;
+    } else {
+      const { data: newC, error } = await supabase
+        .from("customers")
+        .insert({ business_id: appUser.business_id, name: data.customerName, phone: data.customerPhone })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      customerId = newC.id;
+    }
+
+    const dueDate = new Date(data.createdAt);
+    dueDate.setDate(dueDate.getDate() + data.dueInDays);
+    const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+    if (!navigator.onLine) {
+      // Queue for offline sync
+      const pending = {
+        id: crypto.randomUUID(),
+        business_id: appUser.business_id,
+        customer_id: customerId,
+        amount: data.amount,
+        note: data.note,
+        due_date: dueDateStr,
+      };
+      await queueDebt(pending);
+      return; // success — will sync when online
+    }
+
+    const { error } = await supabase.from("debts").insert({
+      business_id: appUser.business_id,
+      customer_id: customerId,
+      amount:      data.amount,
+      note:        data.note || null,
+      due_date:    dueDateStr,
+    });
+    if (error) throw new Error(error.message);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans select-none">
-      {/* Sarlavha */}
-      <header className="p-3.5 bg-slate-950 border-b border-slate-800 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <h1 className="text-sm font-bold text-white flex items-center gap-1.5">
-            <span>📒</span> Nasiya Daftari
-          </h1>
-          <p className="text-[10px] text-slate-400">Kassa va hisob-kitob tizimi</p>
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="text-center space-y-3">
+          <p className="text-rose-400 font-semibold text-lg">⚠️ Xatolik</p>
+          <p className="text-slate-400 text-sm">{authError}</p>
         </div>
-        <button
-          onClick={loadDebts}
-          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition border border-slate-700/50"
-        >
-          🔄 Yangilash
-        </button>
-      </header>
+      </div>
+    );
+  }
 
-      {/* Ekranlar */}
-      <main className="flex-1 p-4 max-w-md mx-auto w-full">
-        {loading ? (
-          <div className="flex flex-col justify-center items-center py-20 text-slate-500 text-xs space-y-2">
-            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <span>Yuklanmoqda...</span>
-          </div>
-        ) : activeTab === "list" ? (
-          <DebtsListScreen debts={debts} onRefresh={loadDebts} />
-        ) : (
-          <FastDebtEntryScreen
-            onSuccess={() => {
-              loadDebts();
-              setActiveTab("list");
-            }}
-          />
-        )}
-      </main>
+  if (!appUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-      {/* Pastki menyu */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur border-t border-slate-800 p-2 flex justify-around z-20 max-w-md mx-auto">
-        <button
-          onClick={() => setActiveTab("list")}
-          className={`flex-1 py-2 flex flex-col items-center justify-center rounded-xl transition ${
-            activeTab === "list"
-              ? "bg-blue-600/20 text-blue-400 font-bold"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <span className="text-base">📋</span>
-          <span className="text-[10px] mt-0.5">Qarzdorlar</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("add")}
-          className={`flex-1 py-2 flex flex-col items-center justify-center rounded-xl transition ${
-            activeTab === "add"
-              ? "bg-blue-600/20 text-blue-400 font-bold"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <span className="text-base">➕</span>
-          <span className="text-[10px] mt-0.5">Yangi Nasiya</span>
-        </button>
-      </nav>
+  return (
+    <div className="w-full min-h-screen bg-slate-950">
+      <FastDebtEntryScreen onSubmit={handleDebtSubmit} />
     </div>
   );
 }
