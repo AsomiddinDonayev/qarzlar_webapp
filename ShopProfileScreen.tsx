@@ -1,16 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Store, 
-  Edit3, 
-  MapPin, 
-  Phone, 
-  User, 
-  CheckCircle2, 
-  Camera, 
-  LogOut,
-  Save,
-  ArrowLeft
-} from 'lucide-react';
+import { Store, Edit3, Camera, CheckCircle2, Save } from 'lucide-react';
 
 export interface ShopProfileData {
   shopName: string;
@@ -24,7 +13,6 @@ export interface ShopProfileData {
 interface ShopProfileScreenProps {
   initialData?: ShopProfileData;
   onSave?: (data: ShopProfileData) => Promise<void>;
-  onBack?: () => void;
 }
 
 const triggerHaptic = (style: 'light' | 'medium' | 'success' = 'light') => {
@@ -41,14 +29,13 @@ const triggerHaptic = (style: 'light' | 'medium' | 'success' = 'light') => {
 export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
   initialData = {
     shopName: '"Baraka" Oziq-ovqat',
-    ownerName: 'Asomiddin Donayev',
+    ownerName: 'Asomiddin',
     phone: '+998 90 123 45 67',
-    address: 'Shurchi tumani, Markaz',
+    address: 'Markaz',
     category: 'Supermarket / Do\'kon',
     description: 'Kundalik oziq-ovqat va xo\'jalik mollari savdosi.'
   },
-  onSave,
-  onBack
+  onSave
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<ShopProfileData>(initialData);
@@ -77,22 +64,10 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-20 flex flex-col gap-4 max-w-md mx-auto select-none">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-24 flex flex-col gap-4 max-w-md mx-auto select-none">
       
-      {/* Top Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button 
-              onClick={onBack}
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          <h1 className="text-lg font-bold">Do'kon Profili</h1>
-        </div>
-
+        <h1 className="text-lg font-bold">Do'kon Profili</h1>
         {!isEditing ? (
           <button
             onClick={() => {
@@ -116,14 +91,12 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
         )}
       </div>
 
-      {/* Success Notification */}
       {successMessage && (
         <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" /> Profil ma'lumotlari muvaffaqiyatli yangilandi!
         </div>
       )}
 
-      {/* Profile Header Card */}
       <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col items-center text-center gap-3">
         <div className="w-20 h-20 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 relative shadow-inner">
           <Store className="w-10 h-10" />
@@ -140,9 +113,7 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
         </div>
       </div>
 
-      {/* Details or Edit Form */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-        
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-400">Do'kon Nomi</label>
           <input
@@ -151,24 +122,20 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
             value={formData.shopName}
             onChange={(e) => handleInputChange('shopName', e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-xl text-sm border outline-none transition ${
-              isEditing 
-                ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' 
-                : 'bg-slate-900/50 border-transparent text-slate-300'
+              isEditing ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' : 'bg-slate-900/50 border-transparent text-slate-300'
             }`}
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-400">Rahbar / Sotuvchi Ismi</label>
+          <label className="text-xs font-semibold text-slate-400">Sotuvchi Ismi</label>
           <input
             type="text"
             disabled={!isEditing}
             value={formData.ownerName}
             onChange={(e) => handleInputChange('ownerName', e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-xl text-sm border outline-none transition ${
-              isEditing 
-                ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' 
-                : 'bg-slate-900/50 border-transparent text-slate-300'
+              isEditing ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' : 'bg-slate-900/50 border-transparent text-slate-300'
             }`}
           />
         </div>
@@ -181,9 +148,7 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
             value={formData.phone}
             onChange={(e) => handleInputChange('phone', e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-xl text-sm border outline-none transition ${
-              isEditing 
-                ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' 
-                : 'bg-slate-900/50 border-transparent text-slate-300'
+              isEditing ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' : 'bg-slate-900/50 border-transparent text-slate-300'
             }`}
           />
         </div>
@@ -196,31 +161,25 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
             value={formData.address}
             onChange={(e) => handleInputChange('address', e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-xl text-sm border outline-none transition ${
-              isEditing 
-                ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' 
-                : 'bg-slate-900/50 border-transparent text-slate-300'
+              isEditing ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' : 'bg-slate-900/50 border-transparent text-slate-300'
             }`}
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-400">Qisqacha Tavsif</label>
+          <label className="text-xs font-semibold text-slate-400">Tavsif</label>
           <textarea
             disabled={!isEditing}
             rows={2}
             value={formData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-xl text-sm border outline-none transition resize-none ${
-              isEditing 
-                ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' 
-                : 'bg-slate-900/50 border-transparent text-slate-300'
+              isEditing ? 'bg-slate-950 border-slate-700 text-slate-100 focus:border-indigo-500' : 'bg-slate-900/50 border-transparent text-slate-300'
             }`}
           />
         </div>
-
       </div>
 
-      {/* Save Button when Editing */}
       {isEditing && (
         <button
           onClick={handleSaveSubmit}
@@ -235,5 +194,3 @@ export const ShopProfileScreen: React.FC<ShopProfileScreenProps> = ({
     </div>
   );
 };
-
-export default ShopProfileScreen;

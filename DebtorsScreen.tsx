@@ -4,14 +4,10 @@ import {
   TrendingUp, 
   Users, 
   AlertCircle, 
-  ChevronRight, 
   Phone, 
-  Calendar, 
+  Clock, 
   ArrowUpRight, 
-  ArrowDownLeft, 
-  Filter,
-  Clock,
-  CheckCircle2
+  ArrowDownLeft 
 } from 'lucide-react';
 
 export interface DebtRecord {
@@ -35,66 +31,30 @@ export interface DebtRecord {
 interface DebtorsScreenProps {
   debtors?: DebtRecord[];
   onCall?: (phone: string) => void;
-  onSelectDebtor?: (debtor: DebtRecord) => void;
 }
 
-const triggerHaptic = (style: 'light' | 'medium' | 'heavy' = 'light') => {
+const triggerHaptic = (style: 'light' | 'medium' = 'light') => {
   if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.HapticFeedback) {
     (window as any).Telegram.WebApp.HapticFeedback.impactOccurred(style);
   }
 };
 
 export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
-  debtors = [
-    {
-      id: '1',
-      customerName: 'Anvar Toshmatov',
-      customerPhone: '+998 90 123 45 67',
-      amount: 450000,
-      paidAmount: 150000,
-      dueDate: '2026-08-10',
-      status: 'active',
-      category: 'Oziq-ovqat',
-      neighborhood: 'Markaz',
-      history: [
-        { date: '2026-07-10', type: 'debt', amount: 450000, note: 'Mahsulot olindi' },
-        { date: '2026-07-15', type: 'payment', amount: 150000, note: 'Qisman tolov' }
-      ]
-    },
-    {
-      id: '2',
-      customerName: 'Dilshod Karimov',
-      customerPhone: '+998 91 987 65 43',
-      amount: 1200000,
-      paidAmount: 0,
-      dueDate: '2026-07-20',
-      status: 'overdue',
-      category: 'Xo\'jalik mollari',
-      neighborhood: 'Yangi Hayot',
-      history: [
-        { date: '2026-06-20', type: 'debt', amount: 1200000, note: 'Qurilish mollari' }
-      ]
-    }
-  ],
-  onCall,
-  onSelectDebtor
+  debtors = [],
+  onCall
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'overdue' | 'paid'>('all');
   const [selectedDebtor, setSelectedDebtor] = useState<DebtRecord | null>(null);
 
-  // Statistics calculation
   const stats = useMemo(() => {
     const totalDebt = debtors.reduce((acc, curr) => acc + (curr.amount - curr.paidAmount), 0);
     const totalOverdue = debtors
       .filter(d => d.status === 'overdue')
       .reduce((acc, curr) => acc + (curr.amount - curr.paidAmount), 0);
-    const activeCount = debtors.filter(d => d.status !== 'paid').length;
-
-    return { totalDebt, totalOverdue, activeCount };
+    return { totalDebt, totalOverdue };
   }, [debtors]);
 
-  // Filtered debtors list
   const filteredDebtors = useMemo(() => {
     return debtors.filter(d => {
       const matchesSearch = d.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -105,16 +65,14 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
   }, [debtors, searchQuery, filterStatus]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-20 flex flex-col gap-4 max-w-md mx-auto select-none">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-24 flex flex-col gap-4 max-w-md mx-auto select-none">
       
-      {/* Header & Statistics Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Qarzdorlar va Statistika</h1>
           <Users className="w-5 h-5 text-indigo-400" />
         </div>
 
-        {/* Stats Cards Grid */}
         <div className="grid grid-cols-2 gap-2.5">
           <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between gap-2">
             <div className="flex items-center justify-between text-slate-400 text-xs">
@@ -138,7 +96,6 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
       <div className="space-y-2">
         <div className="relative">
           <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
@@ -146,12 +103,11 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Ism yoki telefon raqam bo'yicha qidirish..."
+            placeholder="Ism yoki telefon raqam..."
             className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none placeholder:text-slate-600 focus:border-indigo-500 transition"
           />
         </div>
 
-        {/* Status Filters */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: 'all', label: 'Barchasi' },
@@ -177,7 +133,6 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
         </div>
       </div>
 
-      {/* Debtors List */}
       <div className="flex flex-col gap-2.5">
         {filteredDebtors.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
@@ -192,7 +147,6 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
                 onClick={() => {
                   triggerHaptic('light');
                   setSelectedDebtor(debtor);
-                  if (onSelectDebtor) onSelectDebtor(debtor);
                 }}
                 className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between cursor-pointer"
               >
@@ -228,7 +182,6 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
         )}
       </div>
 
-      {/* Debt History Modal / Drawer */}
       {selectedDebtor && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl p-5 max-h-[85vh] flex flex-col gap-4 overflow-y-auto">
@@ -246,11 +199,10 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
               </button>
             </div>
 
-            {/* History Timeline */}
             <div className="space-y-3">
               <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Qarzlar tarixi</h4>
               <div className="space-y-2">
-                {selectedDebtor.history.map((item, idx) => (
+                {selectedDebtor.history?.map((item, idx) => (
                   <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className={`p-2 rounded-lg ${
@@ -288,5 +240,3 @@ export const DebtorsScreen: React.FC<DebtorsScreenProps> = ({
     </div>
   );
 };
-
-export default DebtorsScreen;

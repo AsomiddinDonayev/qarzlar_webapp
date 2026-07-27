@@ -2,24 +2,10 @@ import React, { useEffect, useState } from "react";
 import { validateInitData, getInitData, getTelegramUser } from "./api";
 import { supabase, setSupabaseJwt } from "./db";
 import { useOfflineSync, queueDebt } from "./useOfflineSync";
-import FastDebtEntryScreen, { DebtPayload } from "./FastDebtEntryScreen";
-
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData?: string;
-        initDataUnsafe?: { user?: { id: number; first_name: string; username?: string } };
-        expand?: () => void;
-        ready?: () => void;
-        HapticFeedback?: {
-          impactOccurred: (s: string) => void;
-          notificationOccurred: (s: string) => void;
-        };
-      };
-    };
-  }
-}
+import { FastDebtEntryScreen, DebtPayload } from "./FastDebtEntryScreen";
+import { DebtorsScreen, DebtRecord } from "./DebtorsScreen";
+import { ShopProfileScreen, ShopProfileData } from "./ShopProfileScreen";
+import { PlusCircle, Users, Store } from "lucide-react";
 
 interface AppUser {
   telegram_id: number;
@@ -30,68 +16,112 @@ interface AppUser {
 export default function App() {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [debugLog, setDebugLog] = useState<string>("Boshlanmoqda...");
+  const [activeTab, setActiveTab] = useState<'add-debt' | 'debtors' | 'profile'>('add-debt');
+  const [debtorsList, setDebtorsList] = useState<DebtRecord[]>([]);
+  const [shopProfile, setShopProfile] = useState<ShopProfileData>({
+    shopName: "Mening Do'konim",
+    ownerName: "Rahbar",
+    phone: "+998 90 000 00 00",
+    address: "Markaz",
+    category: "Savdo",
+    description: "Nasiya savdo ilovasi"
+  });
 
   useOfflineSync();
 
   useEffect(() => {
-    try {
-      window.Telegram?.WebApp?.ready?.();
-      window.Telegram?.WebApp?.expand?.();
+    window.Telegram?.WebApp?.ready?.();
+    window.Telegram?.WebApp?.expand?.();
 
-      const initData = getInitData();
-      setDebugLog((prev) => prev + "\nInitData tekshirilmoqda...");
-
-      if (!initData) {
-        // Agar Telegram'dan tashqarida (oddiy brauzerda) ochilgan bo'lsa test uchun to'xtatmaymiz
-        console.warn("InitData topilmadi, lekin davom etamiz.");
-      }
-
-      setDebugLog((prev) => prev + "\nServer bilan bog'lanish...");
-      
-      // Agar initData bo'lmasa, sinov uchun o'tkazib yuborish yoki tekshirish
-      const validationPromise = initData ? validateInitData(initData) : Promise.resolve("test-jwt");
-
-      validationPromise
-        .then(async (jwt) => {
-          setSupabaseJwt(jwt);
-          const tgUser = getTelegramUser() || { id: 12345, first_name: "Test User" }; // Fallback for debugging
-          
-          setDebugLog((prev) => prev + `\nFoydalanuvchi aniqlandi: ${tgUser.id}`);
-
-          const { data, error } = await supabase
-            .from("users")
-            .select("telegram_id, business_id, role")
-            .eq("telegram_id", tgUser.id)
-            .maybeSingle();
-
-          if (error) {
-            throw new Error("Supabase xatosi: " + error.message);
-          }
-          if (!data) {
-            throw new Error(`Foydalanuvchi topilmadi (ID: ${tgUser.id}). Botda /start bosganmisiz?`);
-          }
-          
-          setAppUser(data as AppUser);
-        })
-        .catch((e: Error) => {
-          console.error(e);
-          setAuthError(e.message);
-        });
-    } catch (err: any) {
-      setAuthError("Kutilmagan xato: " + err.message);
+    const initData = getInitData();
+    if (!initData) {
+      setAuthError("Ilovani Telegram ichida oching.");
+      return;
     }
+
+    validateInitData(initData)
+      .then(async (jwt) => {
+        setSupabaseJwt(jwt);
+        const tgUser = getTelegramUser();
+        if (!tgUser) throw new Error("Foydalanuvchi topilmadi.");
+
+        const { data, error } = await supabase
+          .from("users")
+          .select("telegram_id, business_id, role")
+          .eq("telegram_id", tgUser.id)
+          .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error("Avval botda /start bosing.");
+        setAppUser(data as AppUser);
+      })
+      .catch((e: Error) => setAuthError(e.message));
   }, []);
+
+  const handleDebtSubmit = async (data: DebtPayload) => {
+    if (!appUser) throw new Error("Autentifikatsiya xatosi.");
+
+    let customerId: string;
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("business_id", appUser.business_id)
+      .eq("phone", data.customerPhone)
+      .maybeSingle();
+
+    if (existing) {
+      customerId = existing.id;
+    } else {
+      const { data: newC, error } = await supabase
+        .from("customers")
+        .insert({ business_id: appUser.business_id, name: data.customerName, phone: data.customerPhone })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      customerId = newC.id;
+    }
+
+    const dueDate = new Date(data.createdAt);
+    dueDate.setDate(dueDate.getDate() + data.dueInDays);
+    const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+    if (!navigator.onLine) {
+      const pending = {
+        id: crypto.randomUUID(),
+        business_id: appUser.business_id,
+        customer_id: customerId,
+        amount: data.amount,
+        note: data.note,
+        due_date: dueDateStr,
+      };
+      await queueDebt(pending);
+      return;
+    }
+
+    const { error } = await supabase.from("debts").insert({
+      business_id: appUser.business_id,
+      customer_id: customerId,
+      amount: data.amount,
+      note: data.note || null,
+      due_date: dueDateStr,
+    });
+    if (error) throw new Error(error.message);
+  };
+
+  const handleSaveProfile = async (updatedData: ShopProfileData) => {
+    setShopProfile(updatedData);
+  };
+
+  const handleCallDebtor = (phone: string) => {
+    window.location.href = `tel:${phone}`;
+  };
 
   if (authError) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-        <div className="text-center space-y-3 max-w-md">
-          <p className="text-rose-400 font-semibold text-lg">⚠️ Xatolik yuz berdi</p>
-          <p className="text-slate-300 text-sm bg-slate-900 p-4 rounded-lg border border-slate-800 text-left whitespace-pre-wrap">
-            {authError}
-          </p>
-          <p className="text-slate-500 text-xs mt-2 whitespace-pre-wrap">Log: {debugLog}</p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 select-none">
+        <div className="text-center space-y-3">
+          <p className="text-rose-400 font-semibold text-lg">⚠️ Xatolik</p>
+          <p className="text-slate-400 text-sm">{authError}</p>
         </div>
       </div>
     );
@@ -99,22 +129,68 @@ export default function App() {
 
   if (!appUser) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 space-y-4">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center select-none">
         <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 text-xs text-center">Yuklanmoqda...</p>
-        <pre className="text-slate-600 text-[10px] max-w-xs overflow-hidden text-center">{debugLog}</pre>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-h-screen bg-slate-950">
-      <FastDebtEntryScreen onSubmit={handleDebtSubmit} />
+    <div className="w-full min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative select-none">
+      
+      <main className="flex-1 w-full">
+        {activeTab === 'add-debt' && (
+          <FastDebtEntryScreen onSubmit={handleDebtSubmit} />
+        )}
+        {activeTab === 'debtors' && (
+          <DebtorsScreen debtors={debtorsList} onCall={handleCallDebtor} />
+        )}
+        {activeTab === 'profile' && (
+          <ShopProfileScreen initialData={shopProfile} onSave={handleSaveProfile} />
+        )}
+      </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-900/90 border-t border-slate-800/80 backdrop-blur-lg px-6 py-2.5 flex items-center justify-between z-50 shadow-2xl">
+        <button
+          onClick={() => {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            setActiveTab('add-debt');
+          }}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'add-debt' ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <PlusCircle className="w-6 h-6" />
+          <span className="text-[10px] font-semibold">Yangi nasiya</span>
+        </button>
+
+        <button
+          onClick={() => {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            setActiveTab('debtors');
+          }}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'debtors' ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Users className="w-6 h-6" />
+          <span className="text-[10px] font-semibold">Qarzdorlar</span>
+        </button>
+
+        <button
+          onClick={() => {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+            setActiveTab('profile');
+          }}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            activeTab === 'profile' ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Store className="w-6 h-6" />
+          <span className="text-[10px] font-semibold">Do'kon profili</span>
+        </button>
+      </nav>
+
     </div>
   );
-}
-
-// Qo'shimcha funksiya (agar pastda e'lon qilinmagan bo'lsa)
-async function handleDebtSubmit(data: DebtPayload) {
-  // Joyida qoladi
 }
