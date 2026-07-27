@@ -5,7 +5,7 @@ import { useOfflineSync, queueDebt } from "./useOfflineSync";
 import { FastDebtEntryScreen, DebtPayload } from "./FastDebtEntryScreen";
 import { DebtorsScreen, DebtRecord } from "./DebtorsScreen";
 import { ShopProfileScreen, ShopProfileData } from "./ShopProfileScreen";
-import { PlusCircle, Users, Store } from "lucide-react";
+import { PlusCircle, Users, Store, AlertCircle } from "lucide-react";
 
 interface AppUser {
   telegram_id: number;
@@ -18,6 +18,7 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'add-debt' | 'debtors' | 'profile'>('add-debt');
   const [debtorsList, setDebtorsList] = useState<DebtRecord[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [shopProfile, setShopProfile] = useState<ShopProfileData>({
     shopName: "Mening Do'konim",
     ownerName: "Rahbar",
@@ -29,50 +30,63 @@ export default function App() {
 
   useOfflineSync();
 
-  // Supabase'dan qarzdorlarni olib kelish funksiyasi
+  // Xavfsiz va aniq ma'lumot olish (Join o'rniga alohida so'rovlar)
   const fetchDebtors = async (businessId: string) => {
-    const { data, error } = await supabase
-      .from("debts")
-      .select(`
-        id,
-        amount,
-        paid_amount,
-        due_date,
-        status,
-        note,
-        customers (
-          name,
-          phone
-        )
-      `)
-      .eq("business_id", businessId);
+    try {
+      setFetchError(null);
+      
+      // 1. Nasiyalarni olish
+      const { data: debtsData, error: debtsError } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("business_id", businessId);
 
-    if (error) {
-      console.error("Qarzdorlarni olishda xatolik:", error.message);
-      return;
-    }
+      if (debtsError) throw new Error("Nasiyalarni o'qishda xato: " + debtsError.message);
 
-    if (data) {
-      const formatted: DebtRecord[] = data.map((item: any) => ({
-        id: item.id,
-        customerName: item.customers?.name || "Noma'lum",
-        customerPhone: item.customers?.phone || "",
-        amount: item.amount,
-        paidAmount: item.paid_amount || 0,
-        dueDate: item.due_date,
-        status: item.status || 'active',
-        category: "Oziq-ovqat",
-        neighborhood: "Markaz",
-        history: [
-          {
-            date: item.due_date,
-            type: 'debt',
-            amount: item.amount,
-            note: item.note || "Nasiya"
-          }
-        ]
-      }));
+      if (!debtsData || debtsData.length === 0) {
+        setDebtorsList([]);
+        return;
+      }
+
+      // 2. Mijozlarni olish
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("business_id", businessId);
+
+      if (customersError) throw new Error("Mijozlarni o'qishda xato: " + customersError.message);
+
+      // Ma'lumotlarni birlashtirish
+      const customerMap = new Map();
+      customersData?.forEach(c => customerMap.set(c.id, c));
+
+      const formatted: DebtRecord[] = debtsData.map((item: any) => {
+        const customer = customerMap.get(item.customer_id) || {};
+        return {
+          id: item.id,
+          customerName: customer.name || "Noma'lum",
+          customerPhone: customer.phone || "Noma'lum",
+          amount: item.amount,
+          paidAmount: item.paid_amount || 0,
+          dueDate: item.due_date || new Date().toISOString().slice(0, 10),
+          status: item.status || 'active',
+          category: "Oziq-ovqat",
+          neighborhood: "Markaz",
+          history: [
+            {
+              date: item.created_at ? item.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+              type: 'debt',
+              amount: item.amount,
+              note: item.note || "Nasiya qo'shildi"
+            }
+          ]
+        };
+      });
+
       setDebtorsList(formatted);
+    } catch (err: any) {
+      console.error(err);
+      setFetchError(err.message);
     }
   };
 
@@ -102,8 +116,6 @@ export default function App() {
         if (!data) throw new Error("Avval botda /start bosing.");
         
         setAppUser(data as AppUser);
-        
-        // Bazadan qarzdorlarni yuklab olamiz
         await fetchDebtors(data.business_id);
       })
       .catch((e: Error) => setAuthError(e.message));
@@ -113,6 +125,8 @@ export default function App() {
     if (!appUser) throw new Error("Autentifikatsiya xatosi.");
 
     let customerId: string;
+    
+    // Mijoz mavjudligini tekshirish
     const { data: existing } = await supabase
       .from("customers")
       .select("id")
@@ -123,7 +137,7 @@ export default function App() {
     if (existing) {
       customerId = existing.id;
     } else {
-      const { data: newC, error } = await supabase
+      const { data: newC, error: cError } = await supabase
         .from("customers")
         .insert({ 
           business_id: appUser.business_id, 
@@ -132,7 +146,8 @@ export default function App() {
         })
         .select("id")
         .single();
-      if (error) throw new Error(error.message);
+        
+      if (cError) throw new Error("Mijozni saqlashda xato: " + cError.message);
       customerId = newC.id;
     }
 
@@ -151,17 +166,17 @@ export default function App() {
       };
       await queueDebt(pending);
     } else {
-      const { error } = await supabase.from("debts").insert({
+      const { error: dError } = await supabase.from("debts").insert({
         business_id: appUser.business_id,
         customer_id: customerId,
         amount: data.amount,
         note: data.note || null,
         due_date: dueDateStr,
       });
-      if (error) throw new Error(error.message);
+      if (dError) throw new Error("Nasiyani saqlashda xato: " + dError.message);
     }
 
-    // Nasiya qo'shilgandan keyin bazadan ro'yxatni yangilab olamiz
+    // Muvaffaqiyatli saqlangach ro'yxatni yangilaymiz
     await fetchDebtors(appUser.business_id);
   };
 
@@ -195,6 +210,13 @@ export default function App() {
   return (
     <div className="w-full min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative select-none">
       
+      {fetchError && (
+        <div className="bg-rose-500/20 border-b border-rose-500/30 p-2 text-xs text-rose-300 flex items-center gap-2 px-4">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>Baza xatosi: {fetchError}</span>
+        </div>
+      )}
+
       <main className="flex-1 w-full">
         {activeTab === 'add-debt' && (
           <FastDebtEntryScreen onSubmit={handleDebtSubmit} />
@@ -225,7 +247,6 @@ export default function App() {
           onClick={() => {
             window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
             setActiveTab('debtors');
-            // Qarzdorlar sahifasiga o'tganda bazadan yangilab olish uchun:
             if (appUser) fetchDebtors(appUser.business_id);
           }}
           className={`flex flex-col items-center gap-1 transition-all ${
