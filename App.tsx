@@ -29,6 +29,53 @@ export default function App() {
 
   useOfflineSync();
 
+  // Supabase'dan qarzdorlarni olib kelish funksiyasi
+  const fetchDebtors = async (businessId: string) => {
+    const { data, error } = await supabase
+      .from("debts")
+      .select(`
+        id,
+        amount,
+        paid_amount,
+        due_date,
+        status,
+        note,
+        customers (
+          name,
+          phone
+        )
+      `)
+      .eq("business_id", businessId);
+
+    if (error) {
+      console.error("Qarzdorlarni olishda xatolik:", error.message);
+      return;
+    }
+
+    if (data) {
+      const formatted: DebtRecord[] = data.map((item: any) => ({
+        id: item.id,
+        customerName: item.customers?.name || "Noma'lum",
+        customerPhone: item.customers?.phone || "",
+        amount: item.amount,
+        paidAmount: item.paid_amount || 0,
+        dueDate: item.due_date,
+        status: item.status || 'active',
+        category: "Oziq-ovqat",
+        neighborhood: "Markaz",
+        history: [
+          {
+            date: item.due_date,
+            type: 'debt',
+            amount: item.amount,
+            note: item.note || "Nasiya"
+          }
+        ]
+      }));
+      setDebtorsList(formatted);
+    }
+  };
+
   useEffect(() => {
     window.Telegram?.WebApp?.ready?.();
     window.Telegram?.WebApp?.expand?.();
@@ -53,7 +100,11 @@ export default function App() {
 
         if (error) throw new Error(error.message);
         if (!data) throw new Error("Avval botda /start bosing.");
+        
         setAppUser(data as AppUser);
+        
+        // Bazadan qarzdorlarni yuklab olamiz
+        await fetchDebtors(data.business_id);
       })
       .catch((e: Error) => setAuthError(e.message));
   }, []);
@@ -74,7 +125,11 @@ export default function App() {
     } else {
       const { data: newC, error } = await supabase
         .from("customers")
-        .insert({ business_id: appUser.business_id, name: data.customerName, phone: data.customerPhone })
+        .insert({ 
+          business_id: appUser.business_id, 
+          name: data.customerName, 
+          phone: data.customerPhone 
+        })
         .select("id")
         .single();
       if (error) throw new Error(error.message);
@@ -95,17 +150,19 @@ export default function App() {
         due_date: dueDateStr,
       };
       await queueDebt(pending);
-      return;
+    } else {
+      const { error } = await supabase.from("debts").insert({
+        business_id: appUser.business_id,
+        customer_id: customerId,
+        amount: data.amount,
+        note: data.note || null,
+        due_date: dueDateStr,
+      });
+      if (error) throw new Error(error.message);
     }
 
-    const { error } = await supabase.from("debts").insert({
-      business_id: appUser.business_id,
-      customer_id: customerId,
-      amount: data.amount,
-      note: data.note || null,
-      due_date: dueDateStr,
-    });
-    if (error) throw new Error(error.message);
+    // Nasiya qo'shilgandan keyin bazadan ro'yxatni yangilab olamiz
+    await fetchDebtors(appUser.business_id);
   };
 
   const handleSaveProfile = async (updatedData: ShopProfileData) => {
@@ -168,6 +225,8 @@ export default function App() {
           onClick={() => {
             window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
             setActiveTab('debtors');
+            // Qarzdorlar sahifasiga o'tganda bazadan yangilab olish uchun:
+            if (appUser) fetchDebtors(appUser.business_id);
           }}
           className={`flex flex-col items-center gap-1 transition-all ${
             activeTab === 'debtors' ? 'text-indigo-400 scale-105' : 'text-slate-500 hover:text-slate-300'
