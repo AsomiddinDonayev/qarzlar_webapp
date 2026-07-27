@@ -12,6 +12,7 @@ import {
   Tag, 
   Loader2 
 } from 'lucide-react';
+import { api } from './api';
 
 // Types
 export interface DebtPayload {
@@ -27,6 +28,7 @@ export interface DebtPayload {
 
 export interface FastDebtEntryScreenProps {
   onSubmit?: (data: DebtPayload) => Promise<void>;
+  onSuccess?: () => void; // App.tsx bilan bog'lanish uchun qo'shildi
   onBack?: () => void;
   neighborhoods?: string[];
   categories?: string[];
@@ -49,6 +51,7 @@ const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'error' | 'success'
 
 export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
   onSubmit,
+  onSuccess,
   onBack,
   neighborhoods = ["Markaz", "Yangi Hayot", "Navro'z", "Bog'ishamol", "Do'stlik"],
   categories = ["Oziq-ovqat", "Xo'jalik mollari", "Ichimliklar", "Qurilish", "Boshqa"]
@@ -146,14 +149,35 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
     try {
       if (onSubmit) {
         await onSubmit(payload);
+      } else {
+        // App.tsx orqali to'g'ridan-to'g'ri API ga saqlash
+        const success = await api.createDebt({
+          customer_name: customerName.trim(),
+          phone: customerPhone.trim(),
+          amount: numericAmount,
+          due_days: dueInDays,
+          region: selectedNeighborhood,
+          category: selectedCategory,
+        });
+
+        if (!success) {
+          throw new Error("Serverga saqlashda xatolik yuz berdi.");
+        }
       }
+
       triggerHaptic('success');
       setNotification({ type: 'success', message: "Nasiya muvaffaqiyatli saqlandi!" });
+
       // Reset form
       setAmountString('0');
       setCustomerName('');
       setCustomerPhone('');
       setNote('');
+
+      // Ro'yxat oynasiga avtomatik o'tish
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (err: any) {
       triggerHaptic('error');
       setNotification({ 
@@ -290,6 +314,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             {DUE_DAY_OPTIONS.map((days) => (
               <button
                 key={days}
+                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setDueInDays(days);
@@ -317,6 +342,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             {neighborhoods.map((item) => (
               <button
                 key={item}
+                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setSelectedNeighborhood(item);
@@ -344,6 +370,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
             {categories.map((cat) => (
               <button
                 key={cat}
+                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setSelectedCategory(cat);
@@ -372,6 +399,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           ].map((chip) => (
             <button
               key={chip.label}
+              type="button"
               onClick={() => handleQuickAdd(chip.val)}
               className={`py-2 rounded-xl text-xs font-semibold border transition active:scale-95 ${
                 isDarkMode 
@@ -389,6 +417,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((digit) => (
             <button
               key={digit}
+              type="button"
               onClick={() => handleDigitPress(digit)}
               className={`py-3.5 rounded-2xl text-xl font-bold border transition active:scale-95 ${
                 isDarkMode
@@ -402,6 +431,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
 
           {/* Backspace Button */}
           <button
+            type="button"
             onClick={handleBackspace}
             aria-label="Bitta o'chirish"
             className={`py-3.5 rounded-2xl border flex items-center justify-center transition active:scale-95 ${
@@ -417,6 +447,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
         {/* Clear & Save Action Bar */}
         <div className="flex gap-2.5 mt-2">
           <button
+            type="button"
             onClick={handleClear}
             aria-label="Tozalash"
             className={`px-4 py-3.5 rounded-2xl border font-semibold flex items-center justify-center transition active:scale-95 ${
@@ -429,6 +460,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={handleSubmitAttempt}
             disabled={isSubmitting || numericAmount <= 0}
             className="flex-1 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition active:scale-[0.98]"
@@ -465,6 +497,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
 
             <div className="flex flex-col w-full gap-2 pt-2">
               <button
+                type="button"
                 onClick={executeSubmission}
                 disabled={isSubmitting}
                 className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2"
@@ -474,6 +507,7 @@ export const FastDebtEntryScreen: React.FC<FastDebtEntryScreenProps> = ({
               </button>
               
               <button
+                type="button"
                 onClick={() => {
                   triggerHaptic('light');
                   setShowConfirmModal(false);
